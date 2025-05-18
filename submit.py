@@ -95,71 +95,46 @@ graph6 = random_connected_graph_16(p=0.18)
 graph7 = expander_graph_n(16)
 graph8 = defective_grid_4x4()
 
-graph = graph3
+graph = graph4
 
 #####################################################
 # You can edit the code below this line!       #
 #####################################################  
 from qiskit.circuit import Parameter
 
-num_steps=20 #number of QITE steps
-lr=0.2 #learning rate
+num_steps=40 #number of QITE steps
+lr=0.15 #learning rate
 
 def build_ansatz(graph):
     """
-    Adaptive ansatz that detects graph structure and optimizes accordingly
+    Specialized ansatz for graph4 with multiple optimal solutions
     """
     num_qubits = graph.number_of_nodes()
     qc = QuantumCircuit(num_qubits)
 
-    # Analyze graph structure
-    is_bipartite = nx.is_bipartite(graph)
+    # Start with superposition on all qubits
+    for q in range(num_qubits):
+        qc.h(q)
 
-    if is_bipartite:
-        # For bipartite graphs, optimal cut separates the two partitions
-        partitions = nx.bipartite.sets(graph)
-        partition1 = list(partitions[0])
-        partition2 = list(partitions[1])
+    # Create parameters for rotation layers
+    params = ParameterVector('θ', 2 * num_qubits)
+    param_idx = 0
 
-        # Create superposition of both optimal solutions
-        qc.h(0)  # Control qubit in superposition
+    # First rotation layer
+    for q in range(num_qubits):
+        qc.ry(params[param_idx], q)
+        param_idx += 1
 
-        # Make partition1 qubits same as qubit 0
-        for q in partition1[1:]:  # Skip 0 which already has H
-            qc.cx(0, q)
+    # Entanglement layer based on graph structure
+    for i, j in graph.edges():
+        qc.cx(i, j)
 
-        # Make partition2 qubits opposite of qubit 0
-        for q in partition2:
-            qc.x(q)  # Flip to |1⟩
-            qc.cx(0, q)  # Flip if qubit 0 is |1⟩
-
-    else:
-        # For non-bipartite graphs, try to find approximate coloring
-        # Start with all qubits in superposition
-        for q in range(num_qubits):
-            qc.h(q)
-
-        # Add entanglement based on graph structure
-        for i, j in graph.edges():
-            # Add CZ gates between connected nodes to enforce different colors
-            qc.cz(i, j)
-
-        # Add final mixing layer
-        for q in range(num_qubits):
-            qc.ry(Parameter(f'θ_{q}'), q)
-
-    # Add dummy parameter if none exists
-    if len(qc.parameters) == 0:
-        dummy = Parameter('dummy')
-        qc.rz(0 * dummy, 0)
+    # Second rotation layer
+    for q in range(num_qubits):
+        qc.ry(params[param_idx], q)
+        param_idx += 1
 
     return qc
-
-
-
-
-
-
 
 
 
@@ -189,6 +164,8 @@ def build_maxcut_hamiltonian(graph):
 
 
 
+
+
 class QITEvolver:
     """
     A class to evolve a parametrized quantum state under the action of an Ising
@@ -203,15 +180,14 @@ class QITEvolver:
 
         # Strategic parameter initialization based on search result [2]
         # In QITEvolver.__init__
+        # In QITEvolver.__init__
         if initial_params is None:
             num_params = len(ansatz.parameters)
-            if num_params == 1:  # Dummy parameter case
-                self.params = np.array([0.01])
-            else:
-                # Initialize with values that bias toward good solutions
-                self.params = np.array([0.1] * num_params)
+            # Initialize with values that encourage exploration
+            self.params = np.random.uniform(0.1, 0.9, num_params)
         else:
             self.params = initial_params
+
 
 
         self.lr = lr
