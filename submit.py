@@ -95,29 +95,29 @@ graph6 = random_connected_graph_16(p=0.18)
 graph7 = expander_graph_n(16)
 graph8 = defective_grid_4x4()
 
-graph = graph4
+graph = graph5
 
 #####################################################
 # You can edit the code below this line!       #
 #####################################################  
 from qiskit.circuit import Parameter
 
-num_steps=40 #number of QITE steps
-lr=0.15 #learning rate
+num_steps=50 #number of QITE steps
+lr=0.12 #learning rate
 
 def build_ansatz(graph):
     """
-    Specialized ansatz for graph4 with multiple optimal solutions
+    Optimized ansatz for graph5 with enhanced expressibility
     """
     num_qubits = graph.number_of_nodes()
     qc = QuantumCircuit(num_qubits)
 
-    # Start with superposition on all qubits
+    # Create initial superposition
     for q in range(num_qubits):
         qc.h(q)
 
-    # Create parameters for rotation layers
-    params = ParameterVector('θ', 2 * num_qubits)
+    # Create parameters for rotation and entanglement layers
+    params = ParameterVector('θ', 3 * num_qubits)
     param_idx = 0
 
     # First rotation layer
@@ -125,16 +125,34 @@ def build_ansatz(graph):
         qc.ry(params[param_idx], q)
         param_idx += 1
 
-    # Entanglement layer based on graph structure
-    for i, j in graph.edges():
-        qc.cx(i, j)
+    # First entanglement layer - connect high-degree nodes first
+    node_degrees = sorted([(node, graph.degree(node)) for node in graph.nodes()], 
+                         key=lambda x: x[1], reverse=True)
+
+    # Connect highest degree nodes to their neighbors
+    high_degree_nodes = [node for node, degree in node_degrees[:num_qubits//3]]
+    for node in high_degree_nodes:
+        neighbors = list(graph.neighbors(node))
+        for neighbor in neighbors[:3]:  # Limit to 3 connections per high-degree node
+            qc.cx(node, neighbor)
 
     # Second rotation layer
     for q in range(num_qubits):
         qc.ry(params[param_idx], q)
         param_idx += 1
 
+    # Second entanglement layer - ring structure for additional connectivity
+    for q in range(num_qubits-1):
+        qc.cx(q, q+1)
+    qc.cx(num_qubits-1, 0)  # Close the loop
+
+    # Final rotation layer
+    for q in range(num_qubits):
+        qc.ry(params[param_idx], q)
+        param_idx += 1
+
     return qc
+
 
 
 
@@ -166,6 +184,7 @@ def build_maxcut_hamiltonian(graph):
 
 
 
+
 class QITEvolver:
     """
     A class to evolve a parametrized quantum state under the action of an Ising
@@ -181,12 +200,17 @@ class QITEvolver:
         # Strategic parameter initialization based on search result [2]
         # In QITEvolver.__init__
         # In QITEvolver.__init__
+        # In QITEvolver.__init__
         if initial_params is None:
             num_params = len(ansatz.parameters)
-            # Initialize with values that encourage exploration
-            self.params = np.random.uniform(0.1, 0.9, num_params)
+            # Initialize with structured random values
+            first_layer = np.random.uniform(0.1, 0.5, num_params//3)
+            second_layer = np.random.uniform(0.3, 0.7, num_params//3)
+            third_layer = np.random.uniform(0.2, 0.6, num_params - 2*(num_params//3))
+            self.params = np.concatenate([first_layer, second_layer, third_layer])
         else:
             self.params = initial_params
+
 
 
 
