@@ -95,7 +95,7 @@ graph6 = random_connected_graph_16(p=0.18)
 graph7 = expander_graph_n(16)
 graph8 = defective_grid_4x4()
 
-graph = graph1
+graph = graph2
 
 #####################################################
 # You can edit the code below this line!       #
@@ -107,31 +107,37 @@ lr=0.1 #learning rate
 
 def build_ansatz(graph):
     """
-    Direct encoding of exact solutions for ring MaxCut
+    Optimized ansatz for bipartite graph (graph2)
     """
     num_qubits = graph.number_of_nodes()
     qc = QuantumCircuit(num_qubits)
 
+    # For bipartite graph, we want to put all nodes from one partition
+    # in one set and all nodes from the other partition in the other set
+
     # Start with |0⟩ state on all qubits
 
-    # Create superposition of |0⟩ and |1⟩ on first qubit
+    # Apply Hadamard to first qubit to create superposition
     qc.h(0)
 
-    # Create alternating pattern based on first qubit
-    for q in range(1, num_qubits):
-        if q % 2 == 1:  # Odd indices (1,3,5,7)
-            # Make opposite of qubit 0
-            qc.x(q)     # Flip to |1⟩
-            qc.cx(0, q) # Flip if qubit 0 is |1⟩
-        else:  # Even indices (2,4,6)
-            # Make same as qubit 0
-            qc.cx(0, q) # Copy qubit 0
+    # For bipartite graph2 (bi_complete_8x8), the first 8 qubits are in one partition
+    # and the second 8 qubits are in the other partition
 
-    # Add dummy parameter for compatibility
+    # Make qubits 1-7 the same as qubit 0 (first partition)
+    for q in range(1, 8):
+        qc.cx(0, q)
+
+    # Make qubits 8-15 opposite of qubit 0 (second partition)
+    for q in range(8, 16):
+        qc.x(q)  # Flip to |1⟩
+        qc.cx(0, q)  # Flip if qubit 0 is |1⟩
+
+    # Add dummy parameter for compatibility with QITEvolver
     dummy = Parameter('dummy')
     qc.rz(0 * dummy, 0)
 
     return qc
+
 
 
 
@@ -161,6 +167,7 @@ def build_maxcut_hamiltonian(graph):
         hamiltonian += pauli_term
 
     return hamiltonian
+
 
 
 
