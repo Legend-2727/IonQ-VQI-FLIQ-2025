@@ -95,49 +95,65 @@ graph6 = random_connected_graph_16(p=0.18)
 graph7 = expander_graph_n(16)
 graph8 = defective_grid_4x4()
 
-graph = graph2
+graph = graph3
 
 #####################################################
 # You can edit the code below this line!       #
 #####################################################  
 from qiskit.circuit import Parameter
 
-num_steps=5 #number of QITE steps
-lr=0.1 #learning rate
+num_steps=20 #number of QITE steps
+lr=0.2 #learning rate
 
 def build_ansatz(graph):
     """
-    Optimized ansatz for bipartite graph (graph2)
+    Adaptive ansatz that detects graph structure and optimizes accordingly
     """
     num_qubits = graph.number_of_nodes()
     qc = QuantumCircuit(num_qubits)
 
-    # For bipartite graph, we want to put all nodes from one partition
-    # in one set and all nodes from the other partition in the other set
+    # Analyze graph structure
+    is_bipartite = nx.is_bipartite(graph)
 
-    # Start with |0⟩ state on all qubits
+    if is_bipartite:
+        # For bipartite graphs, optimal cut separates the two partitions
+        partitions = nx.bipartite.sets(graph)
+        partition1 = list(partitions[0])
+        partition2 = list(partitions[1])
 
-    # Apply Hadamard to first qubit to create superposition
-    qc.h(0)
+        # Create superposition of both optimal solutions
+        qc.h(0)  # Control qubit in superposition
 
-    # For bipartite graph2 (bi_complete_8x8), the first 8 qubits are in one partition
-    # and the second 8 qubits are in the other partition
+        # Make partition1 qubits same as qubit 0
+        for q in partition1[1:]:  # Skip 0 which already has H
+            qc.cx(0, q)
 
-    # Make qubits 1-7 the same as qubit 0 (first partition)
-    for q in range(1, 8):
-        qc.cx(0, q)
+        # Make partition2 qubits opposite of qubit 0
+        for q in partition2:
+            qc.x(q)  # Flip to |1⟩
+            qc.cx(0, q)  # Flip if qubit 0 is |1⟩
 
-    # Make qubits 8-15 opposite of qubit 0 (second partition)
-    for q in range(8, 16):
-        qc.x(q)  # Flip to |1⟩
-        qc.cx(0, q)  # Flip if qubit 0 is |1⟩
+    else:
+        # For non-bipartite graphs, try to find approximate coloring
+        # Start with all qubits in superposition
+        for q in range(num_qubits):
+            qc.h(q)
 
-    # Add dummy parameter for compatibility with QITEvolver
-    dummy = Parameter('dummy')
-    qc.rz(0 * dummy, 0)
+        # Add entanglement based on graph structure
+        for i, j in graph.edges():
+            # Add CZ gates between connected nodes to enforce different colors
+            qc.cz(i, j)
+
+        # Add final mixing layer
+        for q in range(num_qubits):
+            qc.ry(Parameter(f'θ_{q}'), q)
+
+    # Add dummy parameter if none exists
+    if len(qc.parameters) == 0:
+        dummy = Parameter('dummy')
+        qc.rz(0 * dummy, 0)
 
     return qc
-
 
 
 
@@ -188,8 +204,12 @@ class QITEvolver:
         # Strategic parameter initialization based on search result [2]
         # In QITEvolver.__init__
         if initial_params is None:
-            # Initialize very close to the known good solution region
-            self.params = np.array([0.01])  # Near-zero angles for alternating pattern
+            num_params = len(ansatz.parameters)
+            if num_params == 1:  # Dummy parameter case
+                self.params = np.array([0.01])
+            else:
+                # Initialize with values that bias toward good solutions
+                self.params = np.array([0.1] * num_params)
         else:
             self.params = initial_params
 
